@@ -2,47 +2,57 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/MarwanRadwan7/cube/task"
 	"github.com/MarwanRadwan7/cube/worker"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 )
 
 // FIXME: Fix naming the containers
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	host := os.Getenv("HOST")
+	port, _ := strconv.Atoi(os.Getenv("PORT"))
+
+	fmt.Println("Cube Start Working")
+
 	db := make(map[uuid.UUID]*task.Task)
 	w := worker.Worker{
 		Queue: *queue.New(),
 		Db:    db,
 	}
-	t := task.Task{
-		ID:    uuid.New(),
-		Name:  "test-container-1",
-		State: task.Scheduled,
-		Image: "strm/helloworld-http",
-	}
-	// first time the worker will see the task
-	fmt.Println("starting task")
-	w.AddTask(t)
-	result := w.RunTask()
-	if result.Error != nil {
-		panic(result.Error)
+	api := worker.Api{
+		Address: host,
+		Port:    port,
+		Worker:  &w,
 	}
 
-	t.ContainerID = result.ContainerId
-	fmt.Printf("task %s is running in container %s\n", t.ID, t.ContainerID)
+	go runTasks(&w)
+	api.Start()
+}
 
-	fmt.Println("Sleepy time")
-	time.Sleep(time.Second * 4)
-
-	fmt.Printf("stopping task %s\n", t.ID)
-	t.State = task.Completed
-	w.AddTask(t)
-	result = w.RunTask()
-	if result.Error != nil {
-		panic(result.Error)
+func runTasks(w *worker.Worker) {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.RunTask()
+			if result.Error != nil {
+				log.Printf("Error running task: %s\n", result.Error)
+			}
+		} else {
+			log.Println("No tasks to process currently.")
+		}
+		log.Println("Sleeping for 10 seconds.")
+		time.Sleep(time.Second * 10)
 	}
 }
