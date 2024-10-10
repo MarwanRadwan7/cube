@@ -26,12 +26,20 @@ const (
 	Failed
 )
 
+var stateTransitionMap = map[State][]State{
+	Pending:   {Scheduled},
+	Scheduled: {Scheduled, Running, Failed},
+	Running:   {Running, Completed, Failed},
+	Completed: {},
+	Failed:    {},
+}
+
 type Task struct {
 	ID            uuid.UUID
 	ContainerID   string
 	Name          string
 	State         State
-	Image         string // Refers to the Docker Image task uses
+	Image         string
 	Memory        uint
 	Disk          uint
 	ExposedPorts  nat.PortSet
@@ -79,6 +87,36 @@ type DockerResult struct {
 	Result      string
 }
 
+// NewConfig creates a new Config instance from the given Task.
+func NewConfig(t *Task) *Config {
+	return &Config{
+		Name:          t.Name,
+		Runtime:       struct{ ContainerID string }{t.ContainerID},
+		Image:         t.Image,
+		ExposedPorts:  t.ExposedPorts,
+		RestartPolicy: t.RestartPolicy,
+		AttachStdin:   true,
+		AttachStdout:  true,
+		AttachStderr:  true,
+		Disk:          int64(t.Disk),
+		Memory:        int64(t.Disk),
+	}
+}
+
+// NewDocker creates a new Docker client from the task config
+func NewDocker(config *Config) (*Docker, error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return nil, err
+	}
+
+	return &Docker{
+		Config: *config,
+		Client: cli,
+	}, nil
+}
+
+// Run runs the task in a docker container
 func (d *Docker) Run() DockerResult {
 	ctx := context.Background()
 	reader, err := d.Client.ImagePull(ctx, d.Config.Image, types.ImagePullOptions{})
@@ -166,5 +204,19 @@ func (d *Docker) Stop(id string) DockerResult {
 		Action: "stop",
 		Result: "success",
 	}
+}
 
+// Contains helper function checks if states slice contains specific state
+func Contains(states []State, state State) bool {
+	for _, s := range states {
+		if s == state {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidStateTransition helper function checks if the transition of task's state is valid
+func ValidStateTransition(src State, dst State) bool {
+	return Contains(stateTransitionMap[src], dst)
 }
