@@ -24,6 +24,10 @@ func (a *Api) initRouter() {
 			r.Delete("/", a.StopTaskHandler)
 		})
 	})
+
+	a.Router.Route("/stats", func(r chi.Router) {
+		r.Get("/", a.GetStatsHandler)
+	})
 }
 
 // Start initializes the router and starts the HTTP server that wraps the Worker to serve Manager's Requests.
