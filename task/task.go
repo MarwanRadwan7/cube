@@ -40,8 +40,9 @@ type Task struct {
 	Name          string
 	State         State
 	Image         string
-	Memory        uint
-	Disk          uint
+	Cpu           float64
+	Memory        int64
+	Disk          int64
 	ExposedPorts  nat.PortSet
 	PortBindings  map[string]string
 	RestartPolicy string
