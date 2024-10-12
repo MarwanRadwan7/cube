@@ -14,12 +14,17 @@ type Worker struct {
 	Name      string
 	Queue     queue.Queue
 	Db        map[uuid.UUID]*task.Task
+	Stats     *Stats
 	TaskCount int // Represents the number of tasks a worker has at any given time.
 }
 
 // CollectStats used to periodically collect statistics about the worker.
 func (w *Worker) CollectStats() {
-	fmt.Println("I will collect states")
+	for {
+		log.Println("Collecting stats")
+		w.Stats = GetStats()
+		time.Sleep(time.Second * 10) // Collect metrics every 10 seconds
+	}
 }
 
 // RunTask responsible for identifying the task’s current state then either starting or stopping a task based on the state.

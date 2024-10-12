@@ -21,11 +21,10 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-
 	host := os.Getenv("HOST")
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 
-	fmt.Println("Cube Start Working")
+	fmt.Println("Starting Cube Worker")
 
 	db := make(map[uuid.UUID]*task.Task)
 	w := worker.Worker{
@@ -39,6 +38,7 @@ func main() {
 	}
 
 	go runTasks(&w)
+	go w.CollectStats()
 	api.Start()
 }
 
