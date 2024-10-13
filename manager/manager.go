@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/MarwanRadwan7/cube/task"
 	"github.com/MarwanRadwan7/cube/worker"
@@ -114,8 +115,7 @@ func (m *Manager) SendWork() {
 	log.Printf("%#v\n", t)
 }
 
-// UpdateTasks fetches the latest task updates from all workers and updates the local task database accordingly.
-func (m *Manager) UpdateTasks() {
+func (m *Manager) updateTasks() {
 	for _, worker := range m.Workers {
 		log.Printf("Checking worker %v for task updates", worker)
 
@@ -155,4 +155,33 @@ func (m *Manager) UpdateTasks() {
 // AddTask adds a new task event to the manager's pending queue.
 func (m *Manager) AddTask(te task.TaskEvent) {
 	m.Pending.Enqueue(te)
+}
+
+// GetTasks retrieves all tasks handled by the Manager.
+func (m *Manager) GetTasks() []*task.Task {
+	tasks := []*task.Task{}
+	for _, t := range m.TaskDb {
+		tasks = append(tasks, t)
+	}
+	return tasks
+}
+
+// UpdateTasks fetches the latest task updates from all workers and updates the local task database accordingly.
+func (m *Manager) UpdateTasks() {
+	for {
+		log.Println("Checking for task updates from workers")
+		m.updateTasks()
+		log.Println("Task updates completed")
+		log.Println("Sleeping for 15 seconds")
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (m *Manager) ProcessTasks() {
+	for {
+		log.Println("Processing any tasks in the queue")
+		m.SendWork()
+		log.Println("Sleeping for 10 seconds")
+		time.Sleep(10 * time.Second)
+	}
 }
