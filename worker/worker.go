@@ -143,3 +143,35 @@ func (w *Worker) RunTasks() {
 		time.Sleep(10 * time.Second)
 	}
 }
+
+// InspectTask inspects a given task's Docker container and returns the inspection response.
+func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
+	config := task.NewConfig(&t)
+	d, _ := task.NewDocker(config)
+	return d.Inspect(t.ContainerID)
+}
+
+// UpdateTasks iterates over the tasks in the worker's database and
+// updates their state based on the current status of their associated containers.
+func (w *Worker) UpdateTasks() {
+	for id, t := range w.Db {
+		if t.State == task.Running {
+			resp := w.InspectTask(*t)
+			if resp.Error != nil {
+				log.Printf("Error in Task: %s\n", id)
+			}
+
+			if resp.Container == nil {
+				log.Printf("No container for running task: %s\n", id)
+				w.Db[id].State = task.Failed
+			}
+
+			if resp.Container.State.Status == "exited" {
+				log.Printf("Container for task: %s is in non-running state: %s", id, resp.Container.State.Status)
+				w.Db[id].State = task.Failed
+			}
+
+			w.Db[id].HostPorts = resp.Container.NetworkSettings.NetworkSettingsBase.Ports
+		}
+	}
+}
