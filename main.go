@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/MarwanRadwan7/cube/manager"
 	"github.com/MarwanRadwan7/cube/task"
@@ -31,37 +30,21 @@ func main() {
 		Queue: *queue.New(),
 		Db:    make(map[uuid.UUID]*task.Task),
 	}
-	wapi := worker.Api{
-		Address: whost,
-		Port:    wport,
-		Worker:  &w,
-	}
+	wapi := worker.Api{Address: whost, Port: wport, Worker: &w}
 
-	go runTasks(&w)
+	go w.RunTasks()
 	go w.CollectStats()
+	go w.UpdateTasks()
 	go wapi.Start()
 
-	fmt.Println("Starting Cube manager")
+	fmt.Println("Starting Cube Manager")
 	workers := []string{fmt.Sprintf("%s:%d", whost, wport)}
+
 	m := manager.New(workers)
 	mapi := manager.Api{Address: mhost, Port: mport, Manager: m}
+
 	go m.ProcessTasks()
 	go m.UpdateTasks()
+	go m.DoHealthChecks()
 	mapi.Start()
-
-}
-
-func runTasks(w *worker.Worker) {
-	for {
-		if w.Queue.Len() != 0 {
-			result := w.RunTask()
-			if result.Error != nil {
-				log.Printf("Error running task: %s\n", result.Error)
-			}
-		} else {
-			log.Println("No tasks to process currently.")
-		}
-		log.Println("Sleeping for 10 seconds.")
-		time.Sleep(time.Second * 10)
-	}
 }
