@@ -44,10 +44,13 @@ type Task struct {
 	Memory        int64
 	Disk          int64
 	ExposedPorts  nat.PortSet
+	HostPorts     nat.PortMap
 	PortBindings  map[string]string
 	RestartPolicy string
 	StartTime     time.Time
 	FinishTime    time.Time
+	HealthCheck   string
+	RestartCount  int
 }
 
 // TaskEvent internal object the system uses to trigger tasks from one state to another.
@@ -86,6 +89,11 @@ type DockerResult struct {
 	Error       error
 	Action      string
 	Result      string
+}
+
+type DockerInspectResponse struct {
+	Error     error
+	Container *types.ContainerJSON
 }
 
 // NewConfig creates a new Config instance from the given Task.
@@ -205,6 +213,18 @@ func (d *Docker) Stop(id string) DockerResult {
 		Action: "stop",
 		Result: "success",
 	}
+}
+
+// Inspect inspects a docker container
+func (d *Docker) Inspect(containerID string) DockerInspectResponse {
+	dc, _ := client.NewClientWithOpts(client.FromEnv)
+	ctx := context.Background()
+	resp, err := dc.ContainerInspect(ctx, containerID)
+	if err != nil {
+		log.Printf("Error inspecting container: %s\v", containerID)
+		return DockerInspectResponse{Error: err}
+	}
+	return DockerInspectResponse{Container: &resp}
 }
 
 // Contains helper function checks if states slice contains specific state
