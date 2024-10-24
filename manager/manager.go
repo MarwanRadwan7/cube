@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MarwanRadwan7/cube/node"
+	"github.com/MarwanRadwan7/cube/scheduler"
 	"github.com/MarwanRadwan7/cube/task"
 	"github.com/MarwanRadwan7/cube/worker"
 	"github.com/docker/go-connections/nat"
@@ -25,17 +27,33 @@ type Manager struct {
 	WorkerTaskMap map[string][]uuid.UUID        // Tasks of each Worker.
 	TaskWorkerMap map[uuid.UUID]string          // Worker of a Task.
 	LastWorker    int                           // Index of the last worker selected.
+	WorkerNodes   []*node.Node
+	Scheduler     scheduler.Scheduler // Allows the manager to use any scheduler that implements that interface.
 }
 
 // New initializes and returns a new Manager instance.
-func New(workers []string) *Manager {
+func New(workers []string, schedulerType string) *Manager {
 	taskDb := make(map[uuid.UUID]*task.Task)
 	eventDb := make(map[uuid.UUID]*task.TaskEvent)
 	workerTaskMap := make(map[string][]uuid.UUID)
 	taskWorkerMap := make(map[uuid.UUID]string)
 
+	var nodes []*node.Node
+
 	for worker := range workers {
 		workerTaskMap[workers[worker]] = []uuid.UUID{}
+
+		nAPI := fmt.Sprintf("http://%v", workers[worker])
+		n := node.NewNode(workers[worker], nAPI, "worker")
+		nodes = append(nodes, n)
+	}
+
+	var s scheduler.Scheduler
+	switch schedulerType {
+	case "roundrobin":
+		s = &scheduler.RoundRobin{Name: "roundrobin"}
+	default:
+		s = &scheduler.RoundRobin{Name: "roundrobin"}
 	}
 
 	return &Manager{
@@ -45,20 +63,23 @@ func New(workers []string) *Manager {
 		TaskEventDb:   eventDb,
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,
+		WorkerNodes:   nodes,
+		Scheduler:     s,
 	}
 }
 
 // SelectWorker will serve as a naive scheduler in this early phase
-func (m *Manager) SelectWorker() string {
-	var newWorker int
-	if m.LastWorker+1 < len(m.Workers) {
-		newWorker = m.LastWorker + 1
-		m.LastWorker++
-	} else {
-		newWorker = 0
-		m.LastWorker = 0
+func (m *Manager) SelectWorker(t task.Task) (*node.Node, error) {
+	candidates := m.Scheduler.SelectCandidateNodes(t, m.WorkerNodes)
+	if candidates == nil {
+		msg := fmt.Sprintf("No available candidates match resource request for task: %v", t.ID)
+		err := errors.New(msg)
+		return nil, err
 	}
-	return m.Workers[newWorker]
+	scores := m.Scheduler.Score(t, candidates)
+	selectedNode := m.Scheduler.Pick(scores, candidates)
+
+	return selectedNode, nil
 }
 
 // SendWork sends a task from the pending queue to an available worker.
@@ -68,8 +89,6 @@ func (m *Manager) SendWork() {
 		return
 	}
 
-	w := m.SelectWorker()
-
 	// Converts the event pulled off the Pending queue to the task.TaskEvent type (because items get stored as the interface{} type)
 	e := m.Pending.Dequeue()
 	te := e.(task.TaskEvent)
@@ -78,8 +97,25 @@ func (m *Manager) SendWork() {
 	log.Printf("Pulled task: %v off pending queue\n", t)
 	m.TaskEventDb[te.ID] = &te
 
-	m.WorkerTaskMap[w] = append(m.WorkerTaskMap[w], te.Task.ID)
-	m.TaskWorkerMap[t.ID] = w
+	taskWorker, ok := m.TaskWorkerMap[te.Task.ID]
+	if ok {
+		persistedTask := m.TaskDb[te.Task.ID]
+		if te.State == task.Completed &&
+			task.ValidStateTransition(persistedTask.State, te.State) {
+			m.stopTask(taskWorker, te.Task.ID.String())
+			return
+		}
+		log.Printf("invalid request: existing task %s is in state %v and cannot transition to the completed state\n", persistedTask.ID.String(), persistedTask.State)
+		return
+	}
+
+	w, err := m.SelectWorker(t)
+	if err != nil {
+		log.Printf("Error selecting a worker for task %s: %v\n", t.ID, err)
+	}
+
+	m.WorkerTaskMap[w.Name] = append(m.WorkerTaskMap[w.Name], te.Task.ID)
+	m.TaskWorkerMap[t.ID] = w.Name
 
 	t.State = task.Scheduled
 	m.TaskDb[t.ID] = &t
@@ -89,7 +125,7 @@ func (m *Manager) SendWork() {
 		log.Printf("Unable to marshal task object: %v\n", t)
 	}
 
-	url := fmt.Sprintf("http://%s/tasks", w)
+	url := fmt.Sprintf("http://%s/tasks", w.Name)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("Error connecting to %v: %v\n", w, err)
@@ -293,4 +329,27 @@ func (m *Manager) DoHealthChecks() {
 		log.Println("Sleeping for 60 seconds")
 		time.Sleep(60 * time.Second)
 	}
+}
+
+func (m *Manager) stopTask(worker string, taskID string) {
+	client := &http.Client{}
+	url := fmt.Sprintf("http://%s/tasks/%s", worker, taskID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		log.Printf("Error creating request to delete task %s: %v\n", taskID, err)
+		return
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error connecting to worker at %s: %v\n", url, err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		log.Printf("Error sending request: %v\n", err)
+		return
+	}
+
+	log.Printf("Task %s has been scheduled to be stopped", taskID)
 }
