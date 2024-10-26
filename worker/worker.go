@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/MarwanRadwan7/cube/stats"
 	"github.com/MarwanRadwan7/cube/task"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
@@ -14,7 +15,7 @@ type Worker struct {
 	Name      string
 	Queue     queue.Queue
 	Db        map[uuid.UUID]*task.Task
-	Stats     *Stats
+	Stats     *stats.Stats
 	TaskCount int // Represents the number of tasks a worker has at any given time.
 }
 
@@ -22,7 +23,7 @@ type Worker struct {
 func (w *Worker) CollectStats() {
 	for {
 		log.Println("Collecting stats")
-		w.Stats = GetStats()
+		w.Stats = stats.GetStats()
 		time.Sleep(time.Second * 10) // Collect metrics every 10 seconds
 	}
 }
