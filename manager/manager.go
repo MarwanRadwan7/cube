@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// TODO: Generate the UUID instead of sending on the request
+
 type Manager struct {
 	Pending       queue.Queue            // Queue at which tasks will be replaced first being submitted.
 	TaskDb        store.Store            // Holds all tasks in the system.

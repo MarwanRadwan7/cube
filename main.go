@@ -7,10 +7,7 @@ import (
 	"strconv"
 
 	"github.com/MarwanRadwan7/cube/manager"
-	"github.com/MarwanRadwan7/cube/task"
 	"github.com/MarwanRadwan7/cube/worker"
-	"github.com/golang-collections/collections/queue"
-	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -29,21 +26,12 @@ func main() {
 	fmt.Println("Starting Cube Worker")
 
 	// Initially, Start 3 Workers
-	w1 := worker.Worker{
-		Queue: *queue.New(),
-		Db:    make(map[uuid.UUID]*task.Task),
-	}
-	wapi1 := worker.Api{Address: whost, Port: wport, Worker: &w1}
-	w2 := worker.Worker{
-		Queue: *queue.New(),
-		Db:    make(map[uuid.UUID]*task.Task),
-	}
-	wapi2 := worker.Api{Address: whost, Port: wport + 1, Worker: &w2}
-	w3 := worker.Worker{
-		Queue: *queue.New(),
-		Db:    make(map[uuid.UUID]*task.Task),
-	}
-	wapi3 := worker.Api{Address: whost, Port: wport + 2, Worker: &w3}
+	w1 := worker.New("worker-1", "memory")
+	w2 := worker.New("worker-2", "memory")
+	w3 := worker.New("worker-3", "memory")
+	wapi1 := worker.Api{Address: whost, Port: wport, Worker: w1}
+	wapi2 := worker.Api{Address: whost, Port: wport + 1, Worker: w2}
+	wapi3 := worker.Api{Address: whost, Port: wport + 2, Worker: w3}
 
 	// Worker 1
 	go w1.RunTasks()
