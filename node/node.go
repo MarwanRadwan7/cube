@@ -12,12 +12,11 @@ import (
 	"github.com/MarwanRadwan7/cube/utils"
 )
 
-// FIXME: Differ between Ip and API
-
 // Node represents the physical aspect of the Worker.
 type Node struct {
 	Name            string
 	Ip              string
+	Api             string
 	Cores           int64
 	Memory          int64
 	MemoryAllocated int64
@@ -31,7 +30,7 @@ type Node struct {
 func NewNode(worker string, api string, role string) *Node {
 	return &Node{
 		Name: worker,
-		Ip:   api,
+		Api:  api,
 		Role: role,
 	}
 }
@@ -40,16 +39,16 @@ func (n *Node) GetStats() (*stats.Stats, error) {
 	var resp *http.Response
 	var err error
 
-	url := fmt.Sprintf("%s/stats", n.Ip)
+	url := fmt.Sprintf("%s/stats", n.Api)
 	resp, err = utils.HTTPWithRetry(http.Get, url)
 	if err != nil {
-		msg := fmt.Sprintf("Unable to connect to %v. Permanent failure.\n", n.Ip)
+		msg := fmt.Sprintf("Unable to connect to %v. Permanent failure.\n", n.Api)
 		log.Println(msg)
 		return nil, errors.New(msg)
 	}
 
 	if resp.StatusCode != 200 {
-		msg := fmt.Sprintf("Error retrieving stats from %v: %v", n.Ip, err)
+		msg := fmt.Sprintf("Error retrieving stats from %v: %v", n.Api, err)
 		log.Println(msg)
 		return nil, errors.New(msg)
 	}
