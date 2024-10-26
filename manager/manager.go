@@ -62,12 +62,20 @@ func New(workers []string, schedulerType string, dbType string) *Manager {
 	}
 
 	// Determine the storage type
+	var err error
 	var ts store.Store
 	var es store.Store
 	switch dbType {
 	case "memory":
 		ts = store.NewInMemoryTaskStore()
 		es = store.NewInMemoryTaskEventStore()
+	case "persistent":
+		ts, err = store.NewTaskStore("tasks.db", 0000, "tasks")
+		es, err = store.NewEventStore("events.db", 0000, "events")
+		if err != nil {
+			log.Fatalf("[manager] Error adding manager's datastore")
+			return nil
+		}
 	}
 
 	return &Manager{
