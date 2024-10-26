@@ -100,15 +100,12 @@ type DockerInspectResponse struct {
 func NewConfig(t *Task) *Config {
 	return &Config{
 		Name:          t.Name,
-		Runtime:       struct{ ContainerID string }{t.ContainerID},
-		Image:         t.Image,
 		ExposedPorts:  t.ExposedPorts,
+		Image:         t.Image,
+		Cpu:           t.Cpu,
+		Memory:        t.Memory,
+		Disk:          t.Disk,
 		RestartPolicy: t.RestartPolicy,
-		AttachStdin:   true,
-		AttachStdout:  true,
-		AttachStderr:  true,
-		Disk:          int64(t.Disk),
-		Memory:        int64(t.Disk),
 	}
 }
 

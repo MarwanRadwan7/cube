@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// TODO: Fix Populating the results from the inspect -- get stat
+
 type Worker struct {
 	Name      string
 	Queue     queue.Queue
@@ -148,7 +150,13 @@ func (w *Worker) RunTasks() {
 // InspectTask inspects a given task's Docker container and returns the inspection response.
 func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
 	config := task.NewConfig(&t)
-	d, _ := task.NewDocker(config)
+	d, err := task.NewDocker(config)
+
+	if err != nil {
+		log.Printf("Error in inspecting the task: %s , %v\n", t.ID, err)
+		return task.DockerInspectResponse{Error: err}
+	}
+
 	return d.Inspect(t.ContainerID)
 }
 

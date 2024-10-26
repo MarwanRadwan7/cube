@@ -189,6 +189,7 @@ func (m *Manager) updateTasks() {
 			m.TaskDb[t.ID].StartTime = t.StartTime
 			m.TaskDb[t.ID].FinishTime = t.FinishTime
 			m.TaskDb[t.ID].ContainerID = t.ContainerID
+			m.TaskDb[t.ID].HostPorts = t.HostPorts
 		}
 	}
 }
@@ -241,12 +242,17 @@ func (m *Manager) checkTaskHealth(t task.Task) error {
 	w := m.TaskWorkerMap[t.ID]
 	hostPort := getHostPort(t.HostPorts)
 	worker := strings.Split(w, ":")
+	if hostPort == nil {
+		log.Printf("Have not collected task %s host port yet. Skipping.\n", t.ID)
+		return nil
+	}
+
 	url := fmt.Sprintf("http://%s:%s%s", worker[0], *hostPort, t.HealthCheck)
 	log.Printf("Calling health check for task %s: %s\n", t.ID, url)
 
 	resp, err := http.Get(url)
 	if err != nil {
-		msg := fmt.Sprintf("Error connecting to health check %s", url)
+		msg := fmt.Sprintf("[manager] Error connecting to health check %s", url)
 		log.Println(msg)
 		return errors.New(msg)
 	}
