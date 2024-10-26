@@ -3,6 +3,7 @@ module github.com/MarwanRadwan7/cube
 go 1.23.0
 
 require (
+	github.com/boltdb/bolt v1.3.1
 	github.com/c9s/goprocinfo v0.0.0-20210130143923-c95fcf8c64a8
 	github.com/docker/docker v20.10.8+incompatible
 	github.com/docker/go-connections v0.4.0
@@ -14,7 +15,6 @@ require (
 
 require (
 	github.com/Microsoft/go-winio v0.5.0 // indirect
-	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/containerd/containerd v1.5.6 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/go-units v0.4.0 // indirect
