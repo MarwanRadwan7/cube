@@ -26,9 +26,12 @@ func main() {
 	fmt.Println("Starting Cube Worker")
 
 	// Initially, Start 3 Workers
-	w1 := worker.New("worker-1", "memory")
-	w2 := worker.New("worker-2", "memory")
-	w3 := worker.New("worker-3", "memory")
+	// w1 := worker.New("worker-1", "memory")
+	// w2 := worker.New("worker-2", "memory")
+	// w3 := worker.New("worker-3", "memory")
+	w1 := worker.New("worker-1", "persistent")
+	w2 := worker.New("worker-2", "persistent")
+	w3 := worker.New("worker-3", "persistent")
 	wapi1 := worker.Api{Address: whost, Port: wport, Worker: w1}
 	wapi2 := worker.Api{Address: whost, Port: wport + 1, Worker: w2}
 	wapi3 := worker.Api{Address: whost, Port: wport + 2, Worker: w3}
