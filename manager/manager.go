@@ -12,6 +12,7 @@ import (
 
 	"github.com/MarwanRadwan7/cube/node"
 	"github.com/MarwanRadwan7/cube/scheduler"
+	"github.com/MarwanRadwan7/cube/store"
 	"github.com/MarwanRadwan7/cube/task"
 	"github.com/MarwanRadwan7/cube/worker"
 	"github.com/docker/go-connections/nat"
@@ -20,21 +21,20 @@ import (
 )
 
 type Manager struct {
-	Pending       queue.Queue                   // Queue at which tasks will be replaced first being submitted.
-	TaskDb        map[uuid.UUID]*task.Task      // Holds all tasks in the system.
-	TaskEventDb   map[uuid.UUID]*task.TaskEvent // Holds all task events in the system.
-	Workers       []string                      // List of <hostname>:<port> addresses of workers.
-	WorkerTaskMap map[string][]uuid.UUID        // Tasks of each Worker.
-	TaskWorkerMap map[uuid.UUID]string          // Worker of a Task.
-	LastWorker    int                           // Index of the last worker selected.
+	Pending       queue.Queue            // Queue at which tasks will be replaced first being submitted.
+	TaskDb        store.Store            // Holds all tasks in the system.
+	TaskEventDb   store.Store            // Holds all task events in the system.
+	Workers       []string               // List of <hostname>:<port> addresses of workers.
+	WorkerTaskMap map[string][]uuid.UUID // Tasks of each Worker.
+	TaskWorkerMap map[uuid.UUID]string   // Worker of a Task.
+	LastWorker    int                    // Index of the last worker selected.
 	WorkerNodes   []*node.Node
 	Scheduler     scheduler.Scheduler // Allows the manager to use any scheduler that implements that interface.
 }
 
 // New initializes and returns a new Manager instance.
-func New(workers []string, schedulerType string) *Manager {
-	taskDb := make(map[uuid.UUID]*task.Task)
-	eventDb := make(map[uuid.UUID]*task.TaskEvent)
+func New(workers []string, schedulerType string, dbType string) *Manager {
+
 	workerTaskMap := make(map[string][]uuid.UUID)
 	taskWorkerMap := make(map[uuid.UUID]string)
 
@@ -48,6 +48,7 @@ func New(workers []string, schedulerType string) *Manager {
 		nodes = append(nodes, n)
 	}
 
+	// Determine the scheduler type
 	var s scheduler.Scheduler
 	switch schedulerType {
 	case "roundrobin":
@@ -58,11 +59,20 @@ func New(workers []string, schedulerType string) *Manager {
 		s = &scheduler.RoundRobin{Name: "roundrobin"}
 	}
 
+	// Determine the storage type
+	var ts store.Store
+	var es store.Store
+	switch dbType {
+	case "memory":
+		ts = store.NewInMemoryTaskStore()
+		es = store.NewInMemoryTaskEventStore()
+	}
+
 	return &Manager{
 		Pending:       *queue.New(),
 		Workers:       workers,
-		TaskDb:        taskDb,
-		TaskEventDb:   eventDb,
+		TaskDb:        ts,
+		TaskEventDb:   es,
 		WorkerTaskMap: workerTaskMap,
 		TaskWorkerMap: taskWorkerMap,
 		WorkerNodes:   nodes,
@@ -95,19 +105,36 @@ func (m *Manager) SendWork() {
 	e := m.Pending.Dequeue()
 	te := e.(task.TaskEvent)
 
+	err := m.TaskEventDb.Put(te.ID.String(), &te)
+	if err != nil {
+		log.Printf("error attempting to store task event %s: %s\n",
+			te.ID.String(), err)
+		return
+	}
+
 	t := te.Task
 	log.Printf("Pulled task: %v off pending queue\n", t)
-	m.TaskEventDb[te.ID] = &te
 
 	taskWorker, ok := m.TaskWorkerMap[te.Task.ID]
 	if ok {
-		persistedTask := m.TaskDb[te.Task.ID]
-		if te.State == task.Completed &&
-			task.ValidStateTransition(persistedTask.State, te.State) {
+		result, err := m.TaskDb.Get(te.Task.ID.String())
+		if err != nil {
+			log.Printf("Unable to schedule task: %s\n", err)
+			return
+		}
+
+		persistedTask, ok := result.(*task.Task)
+		if !ok {
+			log.Printf("Unable to convert task to task.Task type\n")
+			return
+		}
+
+		if te.State == task.Completed && task.ValidStateTransition(persistedTask.State, te.State) {
 			m.stopTask(taskWorker, te.Task.ID.String())
 			return
 		}
-		log.Printf("invalid request: existing task %s is in state %v and cannot transition to the completed state\n", persistedTask.ID.String(), persistedTask.State)
+
+		log.Printf("Invalid request: existing task %s is in state %v and cannot transition to the completed state\n", persistedTask.ID.String(), persistedTask.State)
 		return
 	}
 
@@ -116,11 +143,13 @@ func (m *Manager) SendWork() {
 		log.Printf("Error selecting a worker for task %s: %v\n", t.ID, err)
 	}
 
+	log.Printf("[manager] selected worker %s for task %s\n", w.Name, t.ID)
+
 	m.WorkerTaskMap[w.Name] = append(m.WorkerTaskMap[w.Name], te.Task.ID)
 	m.TaskWorkerMap[t.ID] = w.Name
 
 	t.State = task.Scheduled
-	m.TaskDb[t.ID] = &t
+	m.TaskDb.Put(t.ID.String(), &t)
 
 	data, err := json.Marshal(te)
 	if err != nil {
@@ -178,18 +207,26 @@ func (m *Manager) updateTasks() {
 
 		for _, t := range tasks {
 			log.Printf("Attempting to update task %v\n", t.ID)
-			_, ok := m.TaskDb[t.ID]
+
+			result, err := m.TaskDb.Get(t.ID.String())
+			if err != nil {
+				log.Printf("[manager] %s\n", err)
+				continue
+			}
+			taskPersisted, ok := result.(*task.Task)
 			if !ok {
-				log.Printf("Task with ID %s not found\n", t.ID)
-				return
+				log.Printf("cannot convert result %v to task.Task type\n", result)
+				continue
 			}
-			if m.TaskDb[t.ID].State != t.State {
-				m.TaskDb[t.ID].State = t.State
+
+			if taskPersisted.State != t.State {
+				taskPersisted.State = t.State
 			}
-			m.TaskDb[t.ID].StartTime = t.StartTime
-			m.TaskDb[t.ID].FinishTime = t.FinishTime
-			m.TaskDb[t.ID].ContainerID = t.ContainerID
-			m.TaskDb[t.ID].HostPorts = t.HostPorts
+			taskPersisted.StartTime = t.StartTime
+			taskPersisted.FinishTime = t.FinishTime
+			taskPersisted.ContainerID = t.ContainerID
+			taskPersisted.HostPorts = t.HostPorts
+			m.TaskDb.Put(taskPersisted.ID.String(), taskPersisted)
 		}
 	}
 }
@@ -201,11 +238,12 @@ func (m *Manager) AddTask(te task.TaskEvent) {
 
 // GetTasks retrieves all tasks handled by the Manager.
 func (m *Manager) GetTasks() []*task.Task {
-	tasks := []*task.Task{}
-	for _, t := range m.TaskDb {
-		tasks = append(tasks, t)
+	taskList, err := m.TaskDb.List()
+	if err != nil {
+		log.Printf("error getting list of tasks: %v\n", err)
+		return nil
 	}
-	return tasks
+	return taskList.([]*task.Task)
 }
 
 // UpdateTasks fetches the latest task updates from all workers and updates the local task database accordingly.
@@ -271,7 +309,7 @@ func (m *Manager) restartTask(t *task.Task) {
 	w := m.TaskWorkerMap[t.ID]
 	t.State = task.Scheduled
 	t.RestartCount++
-	m.TaskDb[t.ID] = t
+	m.TaskDb.Put(t.ID.String(), t)
 
 	te := task.TaskEvent{
 		ID:        uuid.New(),
