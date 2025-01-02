@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/task"
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
 )
