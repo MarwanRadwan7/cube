@@ -8,8 +8,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/MarwanRadwan7/cube/stats"
-	"github.com/MarwanRadwan7/cube/utils"
+	"github.com/MarwanRadwan7/cube/internal/stats"
+	"github.com/MarwanRadwan7/cube/internal/utils"
 )
 
 // Node represents the physical aspect of the Worker.
