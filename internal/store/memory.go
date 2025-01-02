@@ -3,7 +3,7 @@ package store
 import (
 	"fmt"
 
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/task"
 )
 
 type InMemoryTaskStore struct {

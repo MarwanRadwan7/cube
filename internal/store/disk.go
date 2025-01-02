@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/task"
 	"github.com/boltdb/bolt"
 )
 
