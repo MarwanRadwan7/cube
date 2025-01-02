@@ -5,8 +5,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/MarwanRadwan7/cube/node"
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/node"
+	"github.com/MarwanRadwan7/cube/internal/task"
 )
 
 const (
