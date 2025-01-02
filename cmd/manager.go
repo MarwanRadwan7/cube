@@ -3,7 +3,7 @@ package cmd
 import (
 	"log"
 
-	"github.com/MarwanRadwan7/cube/manager"
+	"github.com/MarwanRadwan7/cube/internal/manager"
 	"github.com/spf13/cobra"
 )
 

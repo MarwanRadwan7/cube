@@ -8,7 +8,7 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/MarwanRadwan7/cube/node"
+	"github.com/MarwanRadwan7/cube/internal/node"
 	"github.com/spf13/cobra"
 )
 

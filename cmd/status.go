@@ -10,7 +10,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/task"
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 )

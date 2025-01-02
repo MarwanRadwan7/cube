@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/MarwanRadwan7/cube/worker"
+	"github.com/MarwanRadwan7/cube/internal/worker"
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 )
@@ -23,10 +23,13 @@ The worker runs tasks and responds to the manager's requests about task state.`,
 
 		log.Println("Starting a Cube Worker.")
 		w := worker.New(name, dbType)
+
+		// Start worker routines
+		if err := w.Start(); err != nil {
+			log.Fatalf("Failed to start worker: %v", err)
+		}
+
 		api := worker.Api{Address: host, Port: port, Worker: w}
-		go w.RunTasks()
-		go w.UpdateTasks()
-		go w.CollectStats()
 		log.Printf("Starting worker API on http://%s:%d", host, port)
 		api.Start()
 	},
