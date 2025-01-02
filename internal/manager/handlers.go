@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/task"
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
 )
