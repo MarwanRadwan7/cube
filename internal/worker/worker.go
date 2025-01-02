@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"github.com/MarwanRadwan7/cube/stats"
-	"github.com/MarwanRadwan7/cube/store"
-	"github.com/MarwanRadwan7/cube/task"
+	"github.com/MarwanRadwan7/cube/internal/stats"
+	"github.com/MarwanRadwan7/cube/internal/store"
+	"github.com/MarwanRadwan7/cube/internal/task"
 	"github.com/golang-collections/collections/queue"
 )
 
@@ -40,18 +40,75 @@ func New(name string, taskDbType string) *Worker {
 		if err != nil {
 			log.Printf("Error adding worker's datastore")
 		}
+	default:
+		s = store.NewInMemoryTaskStore()
 	}
 
 	w.Db = s
+
+	// Initialize Stats
+	w.Stats = stats.GetStats()
+	if w.Stats == nil {
+		log.Println("Warning: Initial stats collection failed, will retry in CollectStats routine")
+		w.Stats = &stats.Stats{} // Initialize with empty stats to prevent nil pointer
+	}
 	return &w
+}
+
+// Add a new method to safely start worker routines
+func (w *Worker) Start() error {
+	if w.Db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// Start the background routines with some basic error handling
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from panic in RunTasks: %v", r)
+			}
+		}()
+		w.RunTasks()
+	}()
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from panic in UpdateTasks: %v", r)
+			}
+		}()
+		w.UpdateTasks()
+	}()
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("Recovered from panic in CollectStats: %v", r)
+			}
+		}()
+		w.CollectStats()
+	}()
+
+	return nil
 }
 
 // CollectStats used to periodically collect statistics about the worker.
 func (w *Worker) CollectStats() {
+	// for {
+	// 	log.Println("Collecting stats")
+	// 	stats := stats.GetStats()
+	// 	if stats == nil {
+	// 		log.Println("[Worker] Stats are not available")
+	// 		stats = stats.New()
+	// 	}
+	// 	w.Stats = stats
+	// 	time.Sleep(time.Second * 10) // Collect metrics every 10 seconds
+	// }
 	for {
 		log.Println("Collecting stats")
 		w.Stats = stats.GetStats()
-		time.Sleep(time.Second * 10) // Collect metrics every 10 seconds
+		w.TaskCount = w.Stats.TaskCount
+		time.Sleep(15 * time.Second)
 	}
 }
 
@@ -203,34 +260,68 @@ func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
 // UpdateTasks iterates over the tasks in the worker's database and
 // updates their state based on the current status of their associated containers.
 func (w *Worker) UpdateTasks() {
+	// Check if database is initialized
+	if w.Db == nil {
+		log.Println("Warning: Database not initialized in worker")
+		return
+	}
+
 	tasks, err := w.Db.List()
 	if err != nil {
 		log.Printf("Error getting list of tasks: %v\n", err)
 		return
 	}
-	ts := tasks.([]*task.Task)
+
+	// Check if tasks is nil before type assertion
+	if tasks == nil {
+		log.Println("No tasks found in database")
+		return
+	}
+
+	ts, ok := tasks.([]*task.Task)
+	if !ok {
+		log.Printf("Error: unexpected type from database List() method")
+		return
+	}
 
 	for _, t := range ts {
+		// Skip if task is nil
+		if t == nil {
+			continue
+		}
+
 		if t.State == task.Running {
 			resp := w.InspectTask(*t)
 			if resp.Error != nil {
-				log.Printf("Error in task:%v, %v\n", t.ID, resp.Error)
+				log.Printf("Error inspecting task %v: %v\n", t.ID, resp.Error)
+				continue
 			}
 
 			if resp.Container == nil {
 				log.Printf("No container for running task: %s\n", t.ID)
 				t.State = task.Failed
-				w.Db.Put(t.ID.String(), t)
+				err := w.Db.Put(t.ID.String(), t)
+				if err != nil {
+					log.Printf("Error updating task state: %v\n", err)
+				}
+				continue
 			}
 
 			if resp.Container.State.Status == "exited" {
-				log.Printf("Container for task: %s is in non-running state: %s", t.ID, resp.Container.State.Status)
+				log.Printf("Container for task %s is in non-running state: %s", t.ID, resp.Container.State.Status)
 				t.State = task.Failed
-				w.Db.Put(t.ID.String(), t)
+				err := w.Db.Put(t.ID.String(), t)
+				if err != nil {
+					log.Printf("Error updating task state: %v\n", err)
+				}
+				continue
 			}
 
 			t.HostPorts = resp.Container.NetworkSettings.NetworkSettingsBase.Ports
-			w.Db.Put(t.ID.String(), t)
+			err := w.Db.Put(t.ID.String(), t)
+			if err != nil {
+				log.Printf("Error updating task ports: %v\n", err)
+			}
 		}
 	}
 }
